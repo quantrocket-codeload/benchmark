@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pandas as pd
 from moonshot import Moonshot
 
 class EqualWeightedIndex(Moonshot):
     """
-    Strategy that buys all stocks in the universe, optionally filtering by dollar volume, 
+    Strategy that buys all stocks in the universe, optionally filtering by dollar volume,
     and weights equally.
-    
+
     Examples
     --------
-    Create equal-weighted index of Canadian stocks with average dollar volume >= 1M CAD: 
-    
+    Create equal-weighted index of Canadian stocks with average dollar volume >= 1M CAD:
+
     >>> from codeload.benchmark import EqualWeightedIndex
     >>>
     >>> class CanadaEqualWeightedIndex(EqualWeightedIndex):
@@ -37,14 +38,14 @@ class EqualWeightedIndex(Moonshot):
     UNIVERSES = None
     EXCLUDE_UNIVERSES = None
 
-    # Optionally filter universe by min dollar volume, or dollar volume rank 
+    # Optionally filter universe by min dollar volume, or dollar volume rank
     # (dollar volume rank takes precedence if both defined)
     MIN_DOLLAR_VOLUME = 0
     DOLLAR_VOLUME_TOP_N_PCT = None
     DOLLAR_VOLUME_WINDOW = 30
-    
-    def prices_to_signals(self, prices):
-          
+
+    def prices_to_signals(self, prices: pd.DataFrame):
+
         dollar_volumes = prices.loc["Volume"] * prices.loc["Close"]
         avg_dollar_volumes = dollar_volumes.rolling(window=self.DOLLAR_VOLUME_WINDOW).mean()
         if self.DOLLAR_VOLUME_TOP_N_PCT:
@@ -52,36 +53,36 @@ class EqualWeightedIndex(Moonshot):
             have_adequate_dollar_volumes = dollar_volume_ranks <= (self.DOLLAR_VOLUME_TOP_N_PCT/100)
         else:
             have_adequate_dollar_volumes = avg_dollar_volumes >= self.MIN_DOLLAR_VOLUME
-            
+
         signals = have_adequate_dollar_volumes.astype(int)
         return signals
 
-    def signals_to_target_weights(self, signals, prices):
-        weights = self.allocate_equal_weights(signals)    
+    def signals_to_target_weights(self, signals: pd.DataFrame, prices: pd.DataFrame):
+        weights = self.allocate_equal_weights(signals)
         return weights
 
-    def target_weights_to_positions(self, weights, prices):
+    def target_weights_to_positions(self, weights: pd.DataFrame, prices: pd.DataFrame):
         positions = weights.shift()
         return positions
 
-    def positions_to_gross_returns(self, positions, prices):
+    def positions_to_gross_returns(self, positions: pd.DataFrame, prices: pd.DataFrame):
         closes = prices.loc["Close"]
         pct_changes = closes.pct_change()
-        # Ignore gains or losses that are likely spurious data (e.g. 2->100 or 100->2) 
+        # Ignore gains or losses that are likely spurious data (e.g. 2->100 or 100->2)
         pct_changes = pct_changes.where((pct_changes > -0.98) & (pct_changes < 50), 0)
         gross_returns = pct_changes * positions.shift()
         return gross_returns
-    
+
 class DollarVolumeWeightedIndex(EqualWeightedIndex):
     """
-    Strategy that buys all stocks in the universe, optionally filtering by dollar volume, 
+    Strategy that buys all stocks in the universe, optionally filtering by dollar volume,
     and weights by dollar volume.
-    
+
     Examples
     --------
-    Create dollar-volume-weighted index of Japanese stocks, including only stocks in the top 
-    50% of dollar volume: 
-    
+    Create dollar-volume-weighted index of Japanese stocks, including only stocks in the top
+    50% of dollar volume:
+
     >>> from codeload.benchmark import DollarVolumeWeightedIndex
     >>>
     >>> class JapanDollarVolumeWeightedIndex(DollarVolumeWeightedIndex):
@@ -96,18 +97,18 @@ class DollarVolumeWeightedIndex(EqualWeightedIndex):
     UNIVERSES = None
     EXCLUDE_UNIVERSES = None
 
-    # Optionally filter universe by min dollar volume, or dollar volume rank 
+    # Optionally filter universe by min dollar volume, or dollar volume rank
     # (dollar volume rank takes precedence if both defined)
     MIN_DOLLAR_VOLUME = 0
     DOLLAR_VOLUME_TOP_N_PCT = None
     DOLLAR_VOLUME_WINDOW = 30
 
-    def signals_to_target_weights(self, signals, prices):
-        
+    def signals_to_target_weights(self, signals: pd.DataFrame, prices: pd.DataFrame):
+
         dollar_volumes = prices.loc["Volume"] * prices.loc["Close"]
         avg_dollar_volumes = dollar_volumes.rolling(window=self.DOLLAR_VOLUME_WINDOW).mean()
         avg_dollar_volumes = avg_dollar_volumes.where(signals > 0)
-        
+
         total_daily_dollar_volumes = avg_dollar_volumes.sum(axis=1)
         weights = avg_dollar_volumes.div(total_daily_dollar_volumes, axis=0)
         return weights
